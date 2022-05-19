@@ -62,9 +62,17 @@ int main(int argc, char** argv)
 		std::cout << "[!] Failed to parse VMENTER" << std::endl;
 		return 1;
 	}	
-
-	std::cout << "VIP: 0x" << std::hex << vm_state.vip << std::endl;
-
 	
+	while ( true )
+	{
+		// unroll vm handler CHECK
+		// deobfuscate handler CHECK mostly
+		// identify handler 
+		// emulate
+		
+		vmp::process( &ctx, &vm_state, true );
+		break;
+	}
+
 	return 0;
 }
