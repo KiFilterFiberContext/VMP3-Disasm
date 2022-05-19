@@ -1,11 +1,11 @@
 #include <vmp.h>
 #include <algorithm>
+#include <ranges>
 
 using namespace triton;
 using namespace triton::arch;
 using namespace triton::arch::x86;
 
-// add reg, 4 == lea reg, [reg+4]
 // /devirt ../virt-32-basic.exe -entry 0x951e7
 
 namespace vmp
@@ -114,34 +114,128 @@ namespace vmp
 		return ins_trace;
 	}
 	
-	void process( triton::API* api, vm_context* vctx, bool verbose )
+	arch::ins_t identify( const vm_context* vctx, const std::vector<x86_ins>& cleaned )
+	{
+		for ( auto& handler : vctx->handlers ) 
+		{
+			if ( handler.rva == vctx->eip )
+				return handler.type;
+		}
+		
+		std::vector<x86_ins> is;
+		for ( auto ins : cleaned )
+		{
+			if ( ins.getType() == ID_INS_POP || ins.getType() == ID_INS_PUSHFD )
+			{
+				is.push_back( ins );
+				continue;
+			}
+			
+			if ( ins.operands.size() < 2 )
+				continue;
+			
+			if ( ins.operands[1].getType() == OP_MEM || ins.operands[0].getType() == OP_MEM )
+			{
+				is.push_back( ins );
+				continue;
+			}
+			
+			if ( ins.operands[0].getType() == OP_REG && ins.operands[0].getRegister().getId() == vctx->vsp_reg )
+			{
+				is.push_back( ins );
+				continue;
+			}
+		}
+		
+		// pattern match the VM handers
+		
+		// mov r64, [vsp + imm32]
+		auto is_read_vsp = []( const vm_context* vctx, x86_ins ins, size_t disp = 0 ) -> bool {
+			return ( ins.getType() == ID_INS_MOV || ins.getType() == ID_INS_MOVZX ) &&
+			   ins.operands[1].getType() == OP_MEM &&
+			   ins.operands[1].getMemory().getBaseRegister().getId() == vctx->vsp_reg &&
+			   ins.operands[1].getMemory().getDisplacement().getValue() == disp;
+		};
+		
+		// mov [vsp + imm32], r64
+		auto is_write_vsp = []( const vm_context* vctx, x86_ins ins, size_t disp = 0 ) -> bool {
+			return ( ins.getType() == ID_INS_MOV || ins.getType() == ID_INS_MOVZX ) &&
+			   ins.operands[0].getType() == OP_MEM &&
+			   ins.operands[0].getMemory().getBaseRegister().getId() == vctx->vsp_reg &&
+			   ins.operands[0].getMemory().getDisplacement().getValue() == disp;
+		};
+		
+		// sub/add vsp, imm32
+		auto is_displace_vsp = []( const vm_context* vctx, x86_ins ins, size_t disp = 4 ) -> bool {
+			return ( ins.getType() == ID_INS_ADD || ins.getType() == ID_INS_SUB ) &&
+				ins.operands[0].getType() == OP_REG &&
+				ins.operands[0].getRegister().getId() == vctx->vsp_reg &&
+				ins.operands[1].getType() == OP_IMM &&
+				ins.operands[1].getImmediate().getValue() == disp;
+		};
+		
+		// mov/movzx r64, [rip]
+		auto is_read_vip = []( const vm_context* vctx, x86_ins ins ) -> bool {
+			return ( ins.getType() == ID_INS_MOV || ins.getType() == ID_INS_MOVZX ) &&
+				ins.operands[0].getType() == OP_REG &&
+				ins.operands[1].getType() == OP_MEM &&
+				ins.operands[1].getMemory().getBaseRegister().getId() == vctx->vip_reg;
+		};
+		
+		auto is_write_vreg = []( const vm_context* vctx, x86_ins ins ) -> bool {
+			return ( ins.getType() == ID_INS_MOV || ins.getType() == ID_INS_MOVZX ) &&
+				ins.operands[0].getType() == OP_MEM &&
+				ins.operands[1].getType() == OP_REG &&
+				ins.operands[0].getMemory().getBaseRegister().getId() == ID_REG_X86_ESP &&
+				ins.operands[0].getMemory().getIndexRegister().getId() != ID_REG_INVALID;
+		};
+		
+		// === VPOP Vreg ===
+		// mov r64, dword ptr [vsp]
+		// add vsp, 4
+		// movzx r64, byte ptr [vip]
+		// mov dword ptr [esp + r64], r64
+		
+		if ( is_read_vsp( vctx, is[0] ) && 
+			  is_displace_vsp( vctx, is[1] ) && 
+			  is_read_vip( vctx, is[2] ) && 
+			  is_write_vreg( vctx, is[3] ) )
+		{
+			return arch::VM_POPD;
+		}
+		
+		return arch::VM_UNK;
+	}
+	
+	int process( triton::API* api, vm_context* vctx, bool verbose )
 	{
 		if ( !vctx->vip )
-			return;
+			return 0;
 		
 		// get cleaned VM handler
 		std::vector is = vmp::deobf( api, vctx, vctx->eip );
-		if ( !is.size() )
-			return;
 		
-		if ( verbose )
+		// check if handler is valid
+		if ( !is.size() )
+			return 0;
+	
+		// identify VM handler type
+		arch::ins_t handler_type = identify( vctx, is );
+		if ( handler_type == arch::VM_UNK )
 		{
+			std::cout << "[!] Unable to classify VM handler at EIP: 0x" << std::hex << vctx->eip << std::endl;
 			for ( auto& ins : is )
 				std::cout << ins.getDisassembly() << std::endl;
+			
+			return 0;
 		}
 		
-		// for ( auto& handler : vctx->handlers )
-		// {
-		//      if ( handler.rva == vctx->eip )
-		// }
-	
-		// what to do after getting VM handler type?
-		// probably setup breakpoints at certain mem access instructions to extract relevant values for the specific handler
-		// function table one for each handler that decides how to process that handler and extract information
+		vctx->handlers.push_back( {
+			.type = handler_type,
+			.rva = vctx->eip
+		} );
 		
-		
-		
-		return;
+		return 0; // temporary
 	}
 	
 	void init( triton::API* api, vm_context* vctx )

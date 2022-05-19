@@ -35,12 +35,15 @@ namespace vmp
 		ID_INS_CWDE
 	};
 
-	// initialize VM by parsing VMINIT
+	// initialize VM by parsing VMINIT via pattern matching instructions
 	void init( triton::API* api, vm_context* vctx );
 	
-	// process VM handler and return VIP
-	void process( triton::API* api, vm_context* vctx, bool clean );
+	// process VM handler (deobfuscate -> identify -> emulate)
+	int process( triton::API* api, vm_context* vctx, bool verbose );
 	
-	// deobfuscate VM basic block
-	std::vector<x86_ins> deobf( triton::API* api, uint64_t block_rva );
+	// identify VM handler type by pattern matching
+	vmp::arch::ins_t identify( const vm_context* vctx, const std::vector<x86_ins>& is );
+	
+	// deobfuscate VM basic block using register tainting/tracing
+	std::vector<x86_ins> deobf( triton::API* api, vm_context* vctx, uint64_t block_rva );
 }

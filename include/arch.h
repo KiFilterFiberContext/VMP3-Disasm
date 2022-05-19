@@ -4,16 +4,12 @@ namespace vmp
 {	
 	namespace arch
 	{
-		// represents VM instruction from stack-machine
+		// represents VM instruction type 
 		enum ins_t
 		{
-			VM_PUSH,
-			VM_POP,
-			VM_EXIT,
 			VM_INIT,
-			VM_SWAP,
-			VM_ADD,
-			UNKNOWN
+			VM_POPD,
+			VM_UNK
 		};
 		
 		struct ins 

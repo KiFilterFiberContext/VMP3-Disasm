@@ -70,8 +70,8 @@ int main(int argc, char** argv)
 		// identify handler 
 		// emulate
 		
-		vmp::process( &ctx, &vm_state, true );
-		break;
+		if ( !vmp::process( &ctx, &vm_state, true ) )
+			break;
 	}
 
 	return 0;
