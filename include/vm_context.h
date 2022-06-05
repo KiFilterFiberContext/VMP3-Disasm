@@ -12,7 +12,7 @@ namespace vmp
 		triton::arch::register_e vrk_reg;
 		
 		triton::arch::register_e jmp_rva_reg;
-		std::vector<vmp::arch::ins> handlers;
+		std::vector<vmp::arch::vm_ins_t> handlers;
 		
 		uint64_t vip;
 		

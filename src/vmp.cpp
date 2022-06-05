@@ -72,7 +72,7 @@ namespace vmp
 			}
 			
 			// record all arithmetic operations involving VSP or VIP
-			if ( ( ins.getType() == ID_INS_SUB || ins.getType() == ID_INS_ADD ) && 
+			if ( ( ins.getType() == ID_INS_SUB || ins.getType() == ID_INS_ADD || ins.getType() == ID_INS_MOV ) && 
 				  ins.operands[0].getType() == OP_REG &&
 				  ( ins.operands[0].getRegister().getId() == vctx->vip_reg || ins.operands[0].getRegister().getId() == vctx->vsp_reg ) )
 			{
@@ -114,7 +114,7 @@ namespace vmp
 		return ins_trace;
 	}
 	
-	arch::ins_t identify( const vm_context* vctx, const std::vector<x86_ins>& cleaned )
+	arch::handler_t identify( const vm_context* vctx, const std::vector<x86_ins>& cleaned )
 	{
 		for ( auto& handler : vctx->handlers ) 
 		{
@@ -182,6 +182,7 @@ namespace vmp
 				ins.operands[1].getMemory().getBaseRegister().getId() == vctx->vip_reg;
 		};
 		
+		// mov dword ptr [esp + r64], r64
 		auto is_write_vreg = []( const vm_context* vctx, x86_ins ins ) -> bool {
 			return ( ins.getType() == ID_INS_MOV || ins.getType() == ID_INS_MOVZX ) &&
 				ins.operands[0].getType() == OP_MEM &&
@@ -190,18 +191,12 @@ namespace vmp
 				ins.operands[0].getMemory().getIndexRegister().getId() != ID_REG_INVALID;
 		};
 		
-		// === VPOP Vreg ===
-		// mov r64, dword ptr [vsp]
-		// add vsp, 4
-		// movzx r64, byte ptr [vip]
-		// mov dword ptr [esp + r64], r64
-		
 		if ( is_read_vsp( vctx, is[0] ) && 
-			  is_displace_vsp( vctx, is[1] ) && 
-			  is_read_vip( vctx, is[2] ) && 
-			  is_write_vreg( vctx, is[3] ) )
+			is_displace_vsp( vctx, is[1] ) && 
+			is_read_vip( vctx, is[2] ) && 
+			is_write_vreg( vctx, is[3] ) )
 		{
-			return arch::VM_POPD;
+			return arch::VM_POPV;
 		}
 		
 		return arch::VM_UNK;
@@ -220,7 +215,7 @@ namespace vmp
 			return 0;
 	
 		// identify VM handler type
-		arch::ins_t handler_type = identify( vctx, is );
+		arch::handler_t handler_type = vmp::identify( vctx, is );
 		if ( handler_type == arch::VM_UNK )
 		{
 			std::cout << "[!] Unable to classify VM handler at EIP: 0x" << std::hex << vctx->eip << std::endl;
@@ -230,10 +225,11 @@ namespace vmp
 			return 0;
 		}
 		
-		vctx->handlers.push_back( {
-			.type = handler_type,
-			.rva = vctx->eip
-		} );
+		// emulate handler with function depending on handler type
+		
+		arch::vm_ins_t handler( vctx->eip, handler_type );
+		// push_back vm_ins_t struct inside of emulate function when we can extract relevant values for each VM instruction
+		
 		
 		return 0; // temporary
 	}
@@ -247,13 +243,7 @@ namespace vmp
 		std::vector ins = api->disassembly( vctx->eip, 2 );
 		if ( ins[0].getType() == ID_INS_PUSH && ins[0].operands[0].getType() == OP_IMM && 
 			  ins[1].getType() == ID_INS_CALL && ins[1].operands[0].getType() == OP_IMM )
-		{
-			// push vm handler info for identification
-			vctx->handlers.push_back( { 
-				.type = arch::VM_INIT,
-				.rva = (uint64_t) ins[1].operands[0].getImmediate().getValue()
-			} );
-			
+		{			
 			// emulate VMINIT until end of VM handler
 			while ( true )
 			{

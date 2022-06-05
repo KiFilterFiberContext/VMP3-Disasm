@@ -10,12 +10,7 @@
 #include <triton/memoryAccess.hpp>
 #include <triton/operandWrapper.hpp>
 #include <triton/register.hpp>
-#include <triton/x8664Cpu.hpp>
-#include <triton/x86Cpu.hpp>
-#include <triton/x86Specifications.hpp>
-
-#include <triton/tritonToLLVM.hpp>
-#include <triton/llvmToTriton.hpp>
+#pragma once
 
 #include <vm_context.h>
 
@@ -42,7 +37,7 @@ namespace vmp
 	int process( triton::API* api, vm_context* vctx, bool verbose );
 	
 	// identify VM handler type by pattern matching
-	vmp::arch::ins_t identify( const vm_context* vctx, const std::vector<x86_ins>& is );
+	vmp::arch::handler_t identify( const vm_context* vctx, const std::vector<x86_ins>& is );
 	
 	// deobfuscate VM basic block using register tainting/tracing
 	std::vector<x86_ins> deobf( triton::API* api, vm_context* vctx, uint64_t block_rva );
