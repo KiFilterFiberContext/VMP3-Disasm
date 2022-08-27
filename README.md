@@ -1,5 +1,7 @@
 # VMProtect Disassembler
-**WIP** Disassembler for x86 binaries virtualized by VMProtect 3
+**DISCLAIMER**: VERY OLD CODE; NOT INTENDED FOR ACTUAL USE
+
+Disassembler for x86 binaries virtualized by VMProtect 3
 
 ## How?
 Unlike [NoVMP](https://github.com/can1357/NoVmp/), this project attempts to lift VMProtect's virtual machine handlers into IL purely through instruction emulation using [Triton](https://github.com/JonathanSalwan/Triton).  The procedure starts by emulating the VMINIT and recording the initial VM state, then proceeding to use this information to deobfuscate the rest of the VM handlers by tainting only relevant VM registers.  The simplified VM handlers are converted to VM instructions by pattern matching certain instruction sequences then emulated to extract runtime information that is logged by the disassembler.  
